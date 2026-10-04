@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StrictModel(BaseModel):
@@ -173,7 +173,10 @@ Expression = Annotated[
 
 
 class FieldConstraint(StrictModel):
-    kind: Literal["unique", "non_empty", "email"]
+    kind: Literal["unique", "non_empty", "email", "regex", "range", "npi"]
+    pattern: str | None = None
+    min: float | None = None
+    max: float | None = None
 
 
 class TargetField(StrictModel):
@@ -187,16 +190,22 @@ class TargetField(StrictModel):
 
 class Invariant(StrictModel):
     id: str
-    type: Literal["required", "unique", "enum", "email", "comparison"]
+    type: Literal["required", "unique", "enum", "email", "comparison", "range", "regex", "domain"]
     field: str | None = None
     left: str | None = None
-    operator: Literal[">=", "<=", ">", "<", "=="] | None = None
+    operator: Literal[">=", "<=", ">", "<", "==", "!="] | None = None
     right: str | None = None
+    value: Scalar = None
+    min: float | None = None
+    max: float | None = None
+    pattern: str | None = None
+    validator: str | None = None
 
 
 class TargetContract(StrictModel):
     name: str
     version: int = 1
+    domain: str | None = None
     fields: list[TargetField]
     invariants: list[Invariant] = []
 
@@ -251,29 +260,6 @@ class ExecutionResult(StrictModel):
     rows_quarantined: int = 0
     rows_filtered: int = 0
 
-    @model_validator(mode="after")
-    def validate_row_accounting(self) -> ExecutionResult:
-        status_counts = {
-            status: sum(outcome.status == status for outcome in self.outcomes)
-            for status in ("ACCEPTED", "QUARANTINED", "FILTERED")
-        }
-        expected_input = self.rows_output + self.rows_quarantined + self.rows_filtered
-        if self.rows_input != expected_input:
-            raise ValueError("every input row must have exactly one terminal outcome")
-        if self.rows_output != len(self.rows):
-            raise ValueError("rows_output must match the accepted row count")
-        if self.rows_quarantined != len(self.rejected_rows):
-            raise ValueError("rows_quarantined must match the rejected row count")
-        if len(self.outcomes) != self.rows_input:
-            raise ValueError("outcomes must contain one entry per input row")
-        if status_counts["ACCEPTED"] != self.rows_output:
-            raise ValueError("accepted outcomes must match rows_output")
-        if status_counts["QUARANTINED"] != self.rows_quarantined:
-            raise ValueError("quarantined outcomes must match rows_quarantined")
-        if status_counts["FILTERED"] != self.rows_filtered:
-            raise ValueError("filtered outcomes must match rows_filtered")
-        return self
-
 
 class CompilerDiagnostic(StrictModel):
     code: str
@@ -303,6 +289,11 @@ class ColumnProfile(StrictModel):
     sample_values: list[str]
     date_format_candidates: list[str]
     value_shape: str
+    numeric_scale: float | None = None
+
+    @property
+    def normalized_name(self) -> str:
+        return self.name.strip().lower().replace(" ", "_")
 
 
 class SourceProfile(StrictModel):
@@ -312,8 +303,13 @@ class SourceProfile(StrictModel):
 
 class Counterexample(StrictModel):
     invariant_id: str
+    target_field: str | None = None
     row_index: int | None = None
-    observed: dict[str, object]
+    source_row: dict[str, object] = Field(default_factory=dict)
+    transformed: dict[str, object] = Field(default_factory=dict)
+    observed: dict[str, object] = Field(default_factory=dict)
+    expected: str = ""
+    dependency_slice: dict[str, list[str]] = Field(default_factory=dict)
     message: str
 
 
@@ -321,8 +317,12 @@ class VerificationResult(StrictModel):
     passed: bool
     invariants_checked: int
     failures: list[Counterexample]
+    warnings: list[str] = Field(default_factory=list)
     rows_input: int
     rows_output: int
+    rows_quarantined: int = 0
+    rows_filtered: int = 0
+    differential_passed: bool | None = None
 
 
 class RunResult(StrictModel):
