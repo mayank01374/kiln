@@ -1,4 +1,6 @@
-from kiln.executor import execute
+import pytest
+
+from kiln.executor import FailRun, execute
 from kiln.models import TransformationProgram
 
 
@@ -115,3 +117,72 @@ def test_quarantine_row_error_policy_is_accounted():
     assert result.rows_output == 1
     assert result.rows_quarantined == 1
     assert result.rows_input == result.rows_output + result.rows_quarantined + result.rows_filtered
+    assert result.rejected_rows == [
+        {
+            "_row_index": 1,
+            "_reason": "no date format matched 'bad'",
+            "d": "bad",
+        }
+    ]
+    assert [outcome.status for outcome in result.outcomes] == ["ACCEPTED", "QUARANTINED"]
+
+
+def test_set_null_policy_preserves_the_row_and_records_acceptance():
+    program = TransformationProgram.model_validate(
+        {
+            "mappings": {
+                "date": {
+                    "op": "parse_date",
+                    "value": {"op": "source", "column": "d"},
+                    "formats": ["%Y-%m-%d"],
+                    "on_error": "set_null",
+                }
+            }
+        }
+    )
+
+    result = execute([{"d": "bad"}], program)
+
+    assert result.rows == [{"date": None}]
+    assert result.rows_output == 1
+    assert result.rows_quarantined == 0
+    assert result.outcomes[0].status == "ACCEPTED"
+
+
+def test_fail_run_policy_stops_execution_with_the_original_error():
+    program = TransformationProgram.model_validate(
+        {
+            "mappings": {
+                "ratio": {
+                    "op": "divide",
+                    "left": {"op": "source", "column": "value"},
+                    "right": {"op": "literal", "value": 0},
+                    "on_error": "fail_run",
+                }
+            }
+        }
+    )
+
+    with pytest.raises(FailRun, match="division by zero"):
+        execute([{"value": 10}], program)
+
+
+def test_execution_is_deterministic_across_repeated_runs():
+    program = TransformationProgram.model_validate(
+        {
+            "mappings": {
+                "value": {
+                    "op": "cast",
+                    "type": "integer",
+                    "value": {"op": "source", "column": "raw"},
+                    "on_error": "quarantine_row",
+                }
+            }
+        }
+    )
+    rows = [{"raw": "10"}, {"raw": "bad"}, {"raw": "20"}]
+
+    first = execute(rows, program)
+    second = execute(rows, program)
+
+    assert first == second

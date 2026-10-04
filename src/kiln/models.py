@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
@@ -250,6 +250,29 @@ class ExecutionResult(StrictModel):
     rows_output: int
     rows_quarantined: int = 0
     rows_filtered: int = 0
+
+    @model_validator(mode="after")
+    def validate_row_accounting(self) -> ExecutionResult:
+        status_counts = {
+            status: sum(outcome.status == status for outcome in self.outcomes)
+            for status in ("ACCEPTED", "QUARANTINED", "FILTERED")
+        }
+        expected_input = self.rows_output + self.rows_quarantined + self.rows_filtered
+        if self.rows_input != expected_input:
+            raise ValueError("every input row must have exactly one terminal outcome")
+        if self.rows_output != len(self.rows):
+            raise ValueError("rows_output must match the accepted row count")
+        if self.rows_quarantined != len(self.rejected_rows):
+            raise ValueError("rows_quarantined must match the rejected row count")
+        if len(self.outcomes) != self.rows_input:
+            raise ValueError("outcomes must contain one entry per input row")
+        if status_counts["ACCEPTED"] != self.rows_output:
+            raise ValueError("accepted outcomes must match rows_output")
+        if status_counts["QUARANTINED"] != self.rows_quarantined:
+            raise ValueError("quarantined outcomes must match rows_quarantined")
+        if status_counts["FILTERED"] != self.rows_filtered:
+            raise ValueError("filtered outcomes must match rows_filtered")
+        return self
 
 
 class CompilerDiagnostic(StrictModel):
