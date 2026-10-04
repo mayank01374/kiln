@@ -9,53 +9,75 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+ErrorPolicy = Literal["set_null", "quarantine_row", "fail_run"]
+Scalar = str | int | float | bool | None
+
+
 class SourceExpr(StrictModel):
     op: Literal["source"]
     column: str
 
 
+class TargetExpr(StrictModel):
+    op: Literal["target"]
+    field: str
+
+
 class LiteralExpr(StrictModel):
     op: Literal["literal"]
-    value: str | int | float | bool | None
+    value: Scalar
 
 
 class CastExpr(StrictModel):
     op: Literal["cast"]
     type: Literal["string", "integer", "float", "boolean"]
     value: Expression
+    on_error: ErrorPolicy = "set_null"
 
 
 class ParseDateExpr(StrictModel):
     op: Literal["parse_date"]
     value: Expression
     formats: list[str] = Field(min_length=1)
+    on_error: ErrorPolicy = "set_null"
 
 
-class TrimExpr(StrictModel):
+class UnaryExpr(StrictModel):
+    value: Expression
+
+
+class TrimExpr(UnaryExpr):
     op: Literal["trim"]
-    value: Expression
 
 
-class LowerExpr(StrictModel):
+class LowerExpr(UnaryExpr):
     op: Literal["lowercase"]
-    value: Expression
 
 
-class UpperExpr(StrictModel):
+class UpperExpr(UnaryExpr):
     op: Literal["uppercase"]
-    value: Expression
 
 
-class NormalizeWhitespaceExpr(StrictModel):
+class NormalizeWhitespaceExpr(UnaryExpr):
     op: Literal["normalize_whitespace"]
-    value: Expression
 
 
-class SplitExpr(StrictModel):
+class SplitExpr(UnaryExpr):
     op: Literal["split"]
-    value: Expression
     delimiter: str
     index: int
+
+
+class SubstringExpr(UnaryExpr):
+    op: Literal["substring"]
+    start: int
+    length: int | None = None
+
+
+class RegexExtractExpr(UnaryExpr):
+    op: Literal["regex_extract"]
+    pattern: str
+    group: int = 1
 
 
 class ConcatExpr(StrictModel):
@@ -64,11 +86,10 @@ class ConcatExpr(StrictModel):
     separator: str = ""
 
 
-class MapValuesExpr(StrictModel):
+class MapValuesExpr(UnaryExpr):
     op: Literal["map_values"]
-    value: Expression
-    mapping: dict[str, str | int | float | bool | None]
-    default: str | int | float | bool | None = None
+    mapping: dict[str, Scalar]
+    default: Scalar = None
 
 
 class CoalesceExpr(StrictModel):
@@ -76,15 +97,57 @@ class CoalesceExpr(StrictModel):
     values: list[Expression] = Field(min_length=1)
 
 
-class RegexExtractExpr(StrictModel):
-    op: Literal["regex_extract"]
-    value: Expression
-    pattern: str
-    group: int = 1
+class LookupExpr(UnaryExpr):
+    op: Literal["lookup"]
+    table: dict[str, Scalar]
+    default: Scalar = None
+
+
+class BinaryExpr(StrictModel):
+    left: Expression
+    right: Expression
+    on_error: ErrorPolicy = "set_null"
+
+
+class AddExpr(BinaryExpr):
+    op: Literal["add"]
+
+
+class SubtractExpr(BinaryExpr):
+    op: Literal["subtract"]
+
+
+class MultiplyExpr(BinaryExpr):
+    op: Literal["multiply"]
+
+
+class DivideExpr(BinaryExpr):
+    op: Literal["divide"]
+
+
+class Predicate(StrictModel):
+    left: Expression
+    operator: Literal["==", "!=", ">", ">=", "<", "<=", "in", "not_in", "is_null", "not_null"]
+    right: Expression | None = None
+
+
+class ConditionalExpr(StrictModel):
+    op: Literal["conditional"]
+    condition: Predicate
+    if_true: Expression
+    if_false: Expression
+
+
+class UnitConvertExpr(UnaryExpr):
+    op: Literal["unit_convert"]
+    factor: float
+    offset: float = 0.0
+    on_error: ErrorPolicy = "set_null"
 
 
 Expression = Annotated[
     SourceExpr
+    | TargetExpr
     | LiteralExpr
     | CastExpr
     | ParseDateExpr
@@ -93,10 +156,18 @@ Expression = Annotated[
     | UpperExpr
     | NormalizeWhitespaceExpr
     | SplitExpr
+    | SubstringExpr
+    | RegexExtractExpr
     | ConcatExpr
     | MapValuesExpr
     | CoalesceExpr
-    | RegexExtractExpr,
+    | LookupExpr
+    | AddExpr
+    | SubtractExpr
+    | MultiplyExpr
+    | DivideExpr
+    | ConditionalExpr
+    | UnitConvertExpr,
     Field(discriminator="op"),
 ]
 
@@ -161,6 +232,22 @@ class ProgramPatch(StrictModel):
     patches: list[ProgramPatchOperation]
 
 
+class RowOutcome(StrictModel):
+    row_index: int
+    status: Literal["ACCEPTED", "QUARANTINED", "FILTERED"]
+    reason_code: str | None = None
+
+
+class ExecutionResult(StrictModel):
+    rows: list[dict[str, object]] = Field(default_factory=list)
+    rejected_rows: list[dict[str, object]] = Field(default_factory=list)
+    outcomes: list[RowOutcome] = Field(default_factory=list)
+    rows_input: int
+    rows_output: int
+    rows_quarantined: int = 0
+    rows_filtered: int = 0
+
+
 class ColumnProfile(StrictModel):
     name: str
     physical_type: str
@@ -204,6 +291,8 @@ class RunResult(StrictModel):
 
 
 for model in [
+    UnaryExpr,
+    BinaryExpr,
     CastExpr,
     ParseDateExpr,
     TrimExpr,
@@ -211,10 +300,19 @@ for model in [
     UpperExpr,
     NormalizeWhitespaceExpr,
     SplitExpr,
+    SubstringExpr,
+    RegexExtractExpr,
     ConcatExpr,
     MapValuesExpr,
     CoalesceExpr,
-    RegexExtractExpr,
+    LookupExpr,
+    AddExpr,
+    SubtractExpr,
+    MultiplyExpr,
+    DivideExpr,
+    Predicate,
+    ConditionalExpr,
+    UnitConvertExpr,
     TransformationProgram,
     ReplaceExpressionPatch,
     AddMappingPatch,
