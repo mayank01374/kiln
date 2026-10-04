@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "mappings": {
+    "customer_id": {"op": "cast", "type": "string", "value": {"op": "source", "column": "Customer Number"}},
+    "first_name": {"op": "split", "value": {"op": "source", "column": "Full Name"}, "delimiter": " ", "index": 0},
+    "last_name": {"op": "split", "value": {"op": "source", "column": "Full Name"}, "delimiter": " ", "index": -1},
+    "email": {"op": "lowercase", "value": {"op": "trim", "value": {"op": "source", "column": "Email Address"}}},
+    "signup_date": {"op": "parse_date", "value": {"op": "source", "column": "Created"}, "formats": ["%m/%d/%Y"]},
+    "status": {"op": "map_values", "value": {"op": "source", "column": "Active"}, "mapping": {"Y": "active", "N": "inactive"}}
+  },
+  "unresolved_fields": []
+}

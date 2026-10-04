@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Test, lint, and type-check caches
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.tox/
+.nox/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Kiln runtime data
+.kiln/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+out.csv
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

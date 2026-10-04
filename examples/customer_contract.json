@@ -1,0 +1,16 @@
+{
+  "name": "customer_v1",
+  "version": 1,
+  "fields": [
+    {"name": "customer_id", "type": "string", "required": true, "constraints": [{"kind": "unique"}]},
+    {"name": "first_name", "type": "string", "required": true},
+    {"name": "last_name", "type": "string", "required": true},
+    {"name": "email", "type": "string", "required": false},
+    {"name": "signup_date", "type": "date", "required": true},
+    {"name": "status", "type": "enum", "required": true, "values": ["active", "inactive", "suspended"]}
+  ],
+  "invariants": [
+    {"id": "unique_customer", "type": "unique", "field": "customer_id"},
+    {"id": "valid_email", "type": "email", "field": "email"}
+  ]
+}
