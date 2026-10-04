@@ -280,25 +280,72 @@ class StaticAnalysis(StrictModel):
         return [diagnostic.message for diagnostic in self.diagnostics]
 
 
+class ValueCount(StrictModel):
+    value: str
+    count: int
+
+
 class ColumnProfile(StrictModel):
     name: str
+    normalized_name: str
     physical_type: str
+    logical_types: list[str] = Field(default_factory=list)
     null_ratio: float
+    approximate_cardinality: int
     uniqueness_ratio: float
-    top_values: list[tuple[str, int]]
-    sample_values: list[str]
-    date_format_candidates: list[str]
-    value_shape: str
+    min_value: float | str | None = None
+    max_value: float | str | None = None
+    mean: float | None = None
+    quantiles: dict[str, float] = Field(default_factory=dict)
+    min_length: int | None = None
+    max_length: int | None = None
+    mean_length: float | None = None
+    top_values: list[ValueCount] = Field(default_factory=list)
+    regex_patterns: list[str] = Field(default_factory=list)
+    date_format_candidates: list[str] = Field(default_factory=list)
     numeric_scale: float | None = None
+    character_classes: list[str] = Field(default_factory=list)
+    sample_values: list[str] = Field(default_factory=list)
 
     @property
-    def normalized_name(self) -> str:
-        return self.name.strip().lower().replace(" ", "_")
+    def value_shape(self) -> str:
+        """Compatibility alias for the most common observed value shape."""
+        return self.regex_patterns[0] if self.regex_patterns else ""
+
+
+class Relationship(StrictModel):
+    kind: Literal["candidate_key", "date_order", "correlation", "functional_dependency"]
+    columns: list[str]
+    score: float
+    detail: str = ""
 
 
 class SourceProfile(StrictModel):
     row_count: int
     columns: list[ColumnProfile]
+    relationships: list[Relationship] = Field(default_factory=list)
+
+    @property
+    def column_map(self) -> dict[str, ColumnProfile]:
+        return {column.name: column for column in self.columns}
+
+
+class SchemaFingerprint(StrictModel):
+    structural_hash: str
+    semantic_hash: str
+    structural_payload: dict[str, object]
+    semantic_payload: dict[str, object]
+
+
+class DriftDistance(StrictModel):
+    total: float
+    header: float
+    logical_type: float
+    null_rate: float
+    format_pattern: float
+    value_distribution: float
+    classification: Literal["EXACT", "COMPATIBLE", "DRIFTED", "UNKNOWN"]
+    changed_columns: list[str] = Field(default_factory=list)
 
 
 class Counterexample(StrictModel):
