@@ -74,7 +74,3 @@ The API exposes `GET /health` and `POST /ingestions`.
 pytest
 ruff check .
 ```
-
-## License
-
-[MIT](LICENSE)

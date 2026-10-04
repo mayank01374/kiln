@@ -204,6 +204,10 @@ class TargetContract(StrictModel):
     def required_fields(self) -> set[str]:
         return {f.name for f in self.fields if f.required}
 
+    @property
+    def field_map(self) -> dict[str, TargetField]:
+        return {field.name: field for field in self.fields}
+
 
 class TransformationProgram(StrictModel):
     version: int = 1
@@ -246,6 +250,25 @@ class ExecutionResult(StrictModel):
     rows_output: int
     rows_quarantined: int = 0
     rows_filtered: int = 0
+
+
+class CompilerDiagnostic(StrictModel):
+    code: str
+    target_field: str | None = None
+    message: str
+
+
+class StaticAnalysis(StrictModel):
+    ok: bool
+    diagnostics: list[CompilerDiagnostic] = Field(default_factory=list)
+    order: list[str] = Field(default_factory=list)
+    lineage: dict[str, list[str]] = Field(default_factory=dict)
+    inferred_types: dict[str, str] = Field(default_factory=dict)
+
+    @property
+    def errors(self) -> list[str]:
+        """Compatibility view for existing CLI error reporting."""
+        return [diagnostic.message for diagnostic in self.diagnostics]
 
 
 class ColumnProfile(StrictModel):
