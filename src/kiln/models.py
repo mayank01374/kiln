@@ -236,8 +236,45 @@ class AddMappingPatch(StrictModel):
     expression: Expression
 
 
+class RemoveMappingPatch(StrictModel):
+    type: Literal["remove_mapping"]
+    target_field: str
+
+
+class ChangeDateFormatsPatch(StrictModel):
+    type: Literal["change_date_formats"]
+    target_field: str
+    formats: list[str] = Field(min_length=1)
+
+
+class ExtendEnumMapPatch(StrictModel):
+    type: Literal["extend_enum_map"]
+    target_field: str
+    mapping: dict[str, Scalar]
+
+
+class ChangeSourceReferencePatch(StrictModel):
+    type: Literal["change_source_reference"]
+    target_field: str
+    old_column: str
+    new_column: str
+
+
+class AddFallbackPatch(StrictModel):
+    type: Literal["add_fallback"]
+    target_field: str
+    fallback: Expression
+
+
 ProgramPatchOperation = Annotated[
-    ReplaceExpressionPatch | AddMappingPatch, Field(discriminator="type")
+    ReplaceExpressionPatch
+    | AddMappingPatch
+    | RemoveMappingPatch
+    | ChangeDateFormatsPatch
+    | ExtendEnumMapPatch
+    | ChangeSourceReferencePatch
+    | AddFallbackPatch,
+    Field(discriminator="type"),
 ]
 
 
@@ -409,5 +446,6 @@ for model in [
     TransformationProgram,
     ReplaceExpressionPatch,
     AddMappingPatch,
+    AddFallbackPatch,
 ]:
     model.model_rebuild()
