@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from datetime import datetime
+from typing import Annotated, Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -409,7 +411,38 @@ class VerificationResult(StrictModel):
     differential_passed: bool | None = None
 
 
+class RegisteredProgram(StrictModel):
+    program_id: str
+    source_family: str
+    contract_name: str
+    contract_version: int
+    version: int
+    fingerprint: SchemaFingerprint
+    profile: SourceProfile
+    program: TransformationProgram
+    status: Literal["candidate", "verified", "production", "retired"]
+    parent_program_id: str | None = None
+    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: datetime
+    promoted_at: datetime | None = None
+
+
+class ProgramMatch(StrictModel):
+    record: RegisteredProgram | None = None
+    distance: DriftDistance | None = None
+
+
+class HumanDecision(StrictModel):
+    program_id: str
+    field: str
+    decision: Literal["approved", "rejected", "edited"]
+    candidate_mapping: dict[str, Any] | None = None
+    approved_mapping: dict[str, Any] | None = None
+    reason: str = ""
+
+
 class RunResult(StrictModel):
+    run_id: str = Field(default_factory=lambda: uuid4().hex)
     status: Literal["VERIFIED", "HUMAN_REVIEW", "FAILED"]
     source_family: str
     structural_fingerprint: str
